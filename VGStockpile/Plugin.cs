@@ -27,7 +27,7 @@ namespace VGStockpile;
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid    = "vgstockpile";
-    public const string PluginName    = "Vanguard Galaxy Stockpile";
+    public const string PluginName    = "Stockpile";
     public const string PluginVersion = "0.7.1";
 
     internal static Plugin          Instance { get; private set; } = null!;
