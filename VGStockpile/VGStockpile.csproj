@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>VGStockpile</AssemblyName>
-    <Product>Vanguard Galaxy Stockpile</Product>
+    <Product>Stockpile</Product>
     <Version>0.7.1</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
