@@ -292,6 +292,7 @@ public class Plugin : BaseUnityPlugin
             jumpDistance = ComputeJumpDistance(current?.system?.guid, snap.SystemGuid);
         }
 
+        if (jumpDistance < 0) { Notifications.Toast("Jump distance unavailable; transfer cannot be quoted."); return; }
         TransferDialog.Open(
             _hudCanvas.transform,
             dir, fromName, toName,
@@ -327,6 +328,8 @@ public class Plugin : BaseUnityPlugin
 
         if (string.IsNullOrEmpty(sourceGuid) || string.IsNullOrEmpty(destGuid))
             return new TransferDialogOutcome(false, "Invalid station selection.");
+
+        if (jumpDistance < 0) return new TransferDialogOutcome(false, "Jump distance unavailable; retry when navigation is ready.");
 
         // Fresh source stock for re-validation.
         var live = Reader.CaptureAll();
@@ -371,11 +374,10 @@ public class Plugin : BaseUnityPlugin
 
     private static int ComputeJumpDistance(string? fromSystemGuid, string? toSystemGuid)
     {
-        if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return 0;
-        if (fromSystemGuid == toSystemGuid) return 0;
+        if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return -1;
 
         var dists = JumpDistances.ComputeFrom(fromSystemGuid);
-        return dists.TryGetValue(toSystemGuid, out var d) ? d : 0;
+        return dists.TryGetValue(toSystemGuid, out var d) ? d : -1;
     }
 
     private void RefreshWindowIfOpen()
