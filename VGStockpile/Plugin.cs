@@ -23,7 +23,7 @@ namespace VGStockpile;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInProcess("VanguardGalaxy.exe")]
-[BepInDependency(ModApi.PluginId, "0.2.0")]
+[BepInDependency(ModApi.PluginId, "0.2.2")]
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid    = "vgstockpile";
@@ -125,6 +125,7 @@ public class Plugin : BaseUnityPlugin
     private void ResetTransferUi()
     {
         _pendingWarning = 0;
+        Locator.BindSession(null);
         if (_window) _window.Hide();
         if (_refineryWindow) _refineryWindow.Hide();
     }
@@ -157,6 +158,7 @@ public class Plugin : BaseUnityPlugin
     {
         if (_icon != null) return;
         _hudCanvas = hudCanvas;
+        Locator.BindSession(ModApi.Services.Navigation.SessionId);
 
         var clickHandler = new StationRowClickHandler(
             Locator,
@@ -372,17 +374,7 @@ public class Plugin : BaseUnityPlugin
         if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return 0;
         if (fromSystemGuid == toSystemGuid) return 0;
 
-        var data = GalaxyMapData.current;
-        if (data is null) return 0;
-
-        SystemMapData? from = null;
-        foreach (var s in data.allSystems)
-        {
-            if (s?.guid == fromSystemGuid) { from = s; break; }
-        }
-        if (from is null) return 0;
-
-        var dists = JumpDistances.ComputeFrom(from);
+        var dists = JumpDistances.ComputeFrom(fromSystemGuid);
         return dists.TryGetValue(toSystemGuid, out var d) ? d : 0;
     }
 
@@ -412,6 +404,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var snapshots = Reader.CaptureAll();
+            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _window.Toggle(snapshots);
         }
         catch (System.Exception ex)
@@ -426,6 +419,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var jobs = RefineryReader.CaptureAll();
+            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _refineryWindow.Toggle(jobs);
         }
         catch (System.Exception ex)
