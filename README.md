@@ -18,7 +18,7 @@ A BepInEx 5 plugin that adds a HUD button (top-right) which opens a single windo
 
 1. Install BepInEx 5.x in your Vanguard Galaxy folder.
 2. Install [VGModAPI 0.2.2 or newer](https://github.com/fankserver/vanguard-galaxy-api). Keep one canonical API copy; do not duplicate its Abstractions DLL in consumer folders.
-3. Drop the `VGStockpile/` folder from the release zip into `BepInEx/plugins/`, including Newtonsoft.Json and notices.
+3. Drop the `VGStockpile/` folder from the release zip into `BepInEx/plugins/`, including Newtonsoft.Json, `vgstockpile.vgmod.json` and notices.
 4. Launch the game. Missing/unsupported API or unavailable lifecycle/save capabilities disable Stockpile before sidecar operations.
 
 ## Configuration
@@ -40,11 +40,15 @@ Build the sibling API Release package first (or set `VGAPI_DLL`). Game/Unity met
 make refresh-asm # current owner-installed game; requires assembly-publicizer
 make build
 make test
-make package CONFIG=Release # inspect and attach dist/VGStockpile.zip to a release
+make package CONFIG=Release # inspect and attach dist/VGStockpile.zip and dist/update.json to a release
 make deploy     # copies into <GAME_DIR>/BepInEx/plugins/VGStockpile/
 ```
 
 `<GAME_DIR>` is hard-coded to a WSL Steam path in the Makefile — adjust locally for non-WSL setups, but don't commit the change.
+
+## Mod metadata
+
+`vgstockpile.vgmod.json` ships beside the plugin DLL as optional author metadata for the Mod API's Mods menu: author, description, project link and the stable update feed. It declares no version, because installed version is authoritative loader data and the advertised version comes from the published release. Packaging validates the sidecar against the documented field limits, checks that the project version, `PluginVersion`, the version compiled into the packaged assembly and the release tag agree, and writes the matching `update.json`. `python3 -m unittest test_package` in `tools/` covers the archive allowlist, sidecar rejections and the compiled-version gate.
 
 ## Architecture
 

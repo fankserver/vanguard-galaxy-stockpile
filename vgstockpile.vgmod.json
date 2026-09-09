@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "pluginId": "vgstockpile",
+  "author": "fank",
+  "description": "See every station's stored materials in one grid, with stations as rows and materials as columns. Sort and filter the overview, then optionally reserve and transfer materials between stations, paying the credit cost and tracking pending deliveries.",
+  "projectUrl": "https://github.com/fankserver/vanguard-galaxy-stockpile",
+  "updateUrl": "https://github.com/fankserver/vanguard-galaxy-stockpile/releases/latest/download/update.json",
+  "channel": "stable"
+}

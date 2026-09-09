@@ -52,9 +52,9 @@ package: build
 deploy: package
 	@test -d "$(PLUGIN_DIR)" || { echo "BepInEx plugins dir not found at $(PLUGIN_DIR)" ; exit 1 ; }
 	@mkdir -p "$(VGSTOCKPILE_DIR)"
-	cp "$(BUILDDIR)/VGStockpile.dll" "$(BUILDDIR)/Newtonsoft.Json.dll" "$(VGSTOCKPILE_DIR)/"
+	cp "$(BUILDDIR)/VGStockpile.dll" "$(BUILDDIR)/Newtonsoft.Json.dll" vgstockpile.vgmod.json "$(VGSTOCKPILE_DIR)/"
 	@if [ -f "$(BUILDDIR)/VGStockpile.pdb" ]; then cp "$(BUILDDIR)/VGStockpile.pdb" "$(VGSTOCKPILE_DIR)/"; fi
-	@echo "Deployed 2 DLL(s) to $(VGSTOCKPILE_DIR)"
+	@echo "Deployed 2 DLL(s) and vgstockpile.vgmod.json to $(VGSTOCKPILE_DIR)"
 
 clean:
 	-$(DOTNET) clean VGStockpile/VGStockpile.csproj
