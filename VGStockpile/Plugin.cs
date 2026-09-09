@@ -40,10 +40,10 @@ public class Plugin : BaseUnityPlugin
     internal RefineryJobReader       RefineryReader  { get; private set; } = null!;
     internal RefineryJobsBuilder     RefineryBuilder { get; private set; } = null!;
 
-    private StationStorageIcon?      _icon;
     private StationStorageWindow?    _window;
-    private RefineryJobsIcon?        _refineryIcon;
     private RefineryJobsWindow?      _refineryWindow;
+    private IHudRegistration?        _launcher;
+    private IHudRegistration?        _refineryLauncher;
     private IGameplayUiService?      _gameplayUi;
     private GameplayUiContainer?     _container;
 
@@ -104,6 +104,10 @@ public class Plugin : BaseUnityPlugin
             // host that already exists is not missed. Notifications never replay.
             _gameplayUi = ModApi.Services.GameplayUi;
             _gameplayUi.Changed += OnGameplayUiChanged;
+            // Registered once for this plugin's lifetime; the API owns corner placement
+            // and coordinates slots with every other mod, so no offsets are chosen here.
+            _launcher = ModApi.Services.Hud.Register(PluginGuid, "stockpile", _ => ToggleWindow());
+            _refineryLauncher = ModApi.Services.Hud.Register(PluginGuid, "refinery", _ => ToggleRefineryWindow());
             var coordinated = Config.Bind("Persistence", "UseApiSaveData", true, "Use API-managed transfer saves. Experimental; disable to use legacy save files.").Value;
             var importLegacy = Config.Bind("Persistence", "ImportLegacySidecars", false, "Read existing transfer files when no API-managed transfer data exists. Sources remain untouched; matching the old queue to this game save is your choice.").Value;
             _lifecycle = coordinated
@@ -136,7 +140,9 @@ public class Plugin : BaseUnityPlugin
             _lastPersistenceStatus = coordinated.Status;
             Log.LogInfo("Transfer save-data status: " + _lastPersistenceStatus);
         }
-        if (_pendingWarning <= 0 || !_icon || _lifecycle?.CanOperate != true) return;
+        // Suppressed rather than queued: a stale warning after a session change would be
+        // worse than none. The host term keeps it from firing with nowhere to appear.
+        if (_pendingWarning <= 0 || _container?.IsValid != true || _lifecycle?.CanOperate != true) return;
         var count = _pendingWarning;
         _pendingWarning = 0;
         Notifications.Toast($"VGStockpile transfers disabled — {count} pending transfers will not deliver until re-enabled.");
@@ -148,6 +154,8 @@ public class Plugin : BaseUnityPlugin
         _lifecycle?.Dispose();
         if (_driver) Destroy(_driver);
         DetachUi();
+        _launcher?.Dispose(); _refineryLauncher?.Dispose();
+        _launcher = null; _refineryLauncher = null;
     }
 
     /// <summary>Teardown arrives before readiness, so a replaced host rebuilds rather than resurrects.</summary>
@@ -162,11 +170,27 @@ public class Plugin : BaseUnityPlugin
     {
         if (_window) Destroy(_window.gameObject);
         if (_refineryWindow) Destroy(_refineryWindow.gameObject);
-        if (_icon) Destroy(_icon.gameObject);
-        if (_refineryIcon) Destroy(_refineryIcon.gameObject);
-        _window = null; _refineryWindow = null; _icon = null; _refineryIcon = null;
+        _window = null; _refineryWindow = null;
         _container?.Dispose();
         _container = null;
+        HideLaunchers();
+    }
+
+    /// <summary>Launchers appear only while a host can actually present their windows.</summary>
+    private void ShowLaunchers()
+    {
+        _launcher?.Update(new HudButton("Stockpile", HudCorner.TopRight, HudIcon.Storage,
+            "Station stockpile overview"), null);
+        _refineryLauncher?.Update(new HudButton("Refinery", HudCorner.TopRight, HudIcon.Refinery,
+            "Refinery jobs"), null);
+    }
+
+    /// <summary>Keeps the registrations; an entry without a usable window shows nothing.</summary>
+    private void HideLaunchers()
+    {
+        if (ModApi.Services.Lifecycle.SessionTracking.Availability.Reason == ServiceUnavailableReason.ApiStopped) return;
+        _launcher?.Update(null, null);
+        _refineryLauncher?.Update(null, null);
     }
 
     private void AttachUi(GameplayUiSnapshot? host)
@@ -213,13 +237,6 @@ public class Plugin : BaseUnityPlugin
             initialShowEmptyRefineries:   () => Cfg.ShowEmptyRefineries.Value,
             onShowEmptyRefineriesChanged: v => Cfg.ShowEmptyRefineries.Value = v);
 
-        _icon = StationStorageIcon.Create(
-            hudRoot,
-            onClick: ToggleWindow,
-            rightPadding: Cfg.IconRightPadding.Value,
-            topPadding:   Cfg.IconTopPadding.Value,
-            log:          Log);
-
         _refineryWindow = RefineryJobsWindow.Create(
             hudRoot, RefineryBuilder, Catalog,
             capture: () => RefineryReader.CaptureAll(),
@@ -230,15 +247,9 @@ public class Plugin : BaseUnityPlugin
             },
             log: Log);
 
-        // Place the refinery-jobs icon to the left of the stockpile icon
-        // (icons are 40px wide; +48 leaves an 8px gap), same top edge.
-        _refineryIcon = RefineryJobsIcon.Create(
-            hudRoot,
-            onClick: ToggleRefineryWindow,
-            rightPadding: Cfg.IconRightPadding.Value + 48f,
-            topPadding:   Cfg.IconTopPadding.Value,
-            log:          Log);
-
+        // Launchers stay registered across host loss; only their models change, so the
+        // API keeps their corner slots rather than reordering neighbours on every reload.
+        ShowLaunchers();
         Log.LogInfo($"VGStockpile UI attached to gameplay host {host.Id}.");
     }
 

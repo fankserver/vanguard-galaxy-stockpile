@@ -28,7 +28,6 @@ A BepInEx 5 plugin that adds a HUD button (top-right) which opens a single windo
 | Key | Default | Purpose |
 |---|---|---|
 | `UI.ActiveCategories` | `RefinedCanister,RefinedGoods,Crystal,TradeGoods,Salvage,Other` | Comma-separated list of visible categories. Toggling a filter button updates this. |
-| `UI.IconRightPadding` / `UI.IconTopPadding` | `128` / `12` | HUD icon position from the top-right corner. |
 | `UI.CloseWindowOnLocate` | `true` | Auto-close the window when a station label is clicked. |
 | `Transfers.Enabled` | `false` | Enable inventory/credit-changing transfers. |
 
@@ -55,7 +54,7 @@ make deploy     # copies into <GAME_DIR>/BepInEx/plugins/VGStockpile/
 Three internal areas:
 
 - **`Data/`** — pure read side. `StationStorageReader` walks the galaxy POIs, reads each `SpaceStation.materialStorage`, returns immutable `StationStorageSnapshot` records. `MaterialCatalog` resolves `InventoryItemType` references and classifies materials into the `MaterialCategory` enum.
-- **`UI/`** — UGUI rendering. `StorageGridBuilder` (pure, unit-tested) computes columns + sorted rows. `StationStorageWindow` and `StationStorageIcon` are the Unity-touching layer.
+- **`UI/`** — UGUI rendering. `StorageGridBuilder` (pure, unit-tested) computes columns + sorted rows. `StationStorageWindow` and `RefineryJobsWindow` are the Unity-touching layer; their launchers are shared HUD registrations, not owned icons.
 - **`Locate/`** — `IStationLocator` + production `StationLocator`, which focuses a station through the Mod API navigation service for the bound session.
 
 ## Transfer lifecycle boundaries
@@ -64,7 +63,9 @@ Queue restoration waits for PlayerReady; mutations/ticks wait for the matching G
 
 ## UI attachment
 
-Windows and icons attach when `ModApi.Services.GameplayUi` reports a host, and live under one API-owned container obtained from the Unity bridge. Stockpile subscribes before reading `Current`, so a host that already exists is not missed, and rebuilds its content when a host is revoked and replaced. There is no Harmony patch, polling or readiness guess; if no host is reported, Stockpile has no UI rather than attaching to something unverified. Because the API's host requires a tracked session in addition to native UI initialization, UI attachment now depends on lifecycle session tracking being available. The transfer dialog is created on demand from the retained container, so opening it does not need a separate readiness signal.
+Both launchers are shared HUD registrations placed in the top-right corner with the API's semantic Storage and Refinery visuals, so their slots are coordinated with every other mod instead of using fixed offsets. The registrations live for the plugin's lifetime and simply show nothing while no window can be presented. The former `UI.IconRightPadding` and `UI.IconTopPadding` keys are gone, along with this mod's own icon sprite lookup and retry timers.
+
+Windows attach when `ModApi.Services.GameplayUi` reports a host, and live under one API-owned container obtained from the Unity bridge. Stockpile subscribes before reading `Current`, so a host that already exists is not missed, and rebuilds its content when a host is revoked and replaced. There is no Harmony patch, polling or readiness guess; if no host is reported, Stockpile has no UI rather than attaching to something unverified. Because the API's host requires a tracked session in addition to native UI initialization, UI attachment now depends on lifecycle session tracking being available. The transfer dialog is created on demand from the retained container, so opening it does not need a separate readiness signal.
 
 SaveStarted captures the queue without changing vanilla data; only its matching SaveSucceeded writes that snapshot to the reported destination. It is after vanilla's caller snapshot construction, not a pre-serialization hook. Failed/skipped saves leave sidecars unchanged. Sidecar write failures pause mutations (jobs stay visible) until a later successful save retries persistence. Corrupt, unreadable or newer-version sidecars disable restoration for that attempt and are never intentionally overwritten. Empty queues do not create new sidecars. There is no cross-file transaction or rollback guarantee. Unsaved transfer progress is lost with unsaved vanilla changes.
 
