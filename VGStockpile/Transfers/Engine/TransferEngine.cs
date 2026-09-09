@@ -5,7 +5,7 @@ using VGStockpile.Transfers.Persistence;
 
 namespace VGStockpile.Transfers.Engine;
 
-internal enum TransferError { None, InsufficientCredits, QueueFull, EmptyManifest, SessionUnavailable, PersistenceUnavailable }
+internal enum TransferError { None, InsufficientCredits, QueueFull, EmptyManifest, SessionUnavailable, PersistenceUnavailable, DistanceUnavailable }
 
 internal readonly record struct TransferRequestResult(
     bool IsSuccess, TransferError Error, TransferRequest? Created);
@@ -42,6 +42,7 @@ internal sealed class TransferEngine
         IReadOnlyList<TransferManifestLine> manifest, int jumpDistance)
     {
         if (!CanOperate) return new TransferRequestResult(false, UnavailableReason?.Invoke() ?? TransferError.SessionUnavailable, null);
+        if (jumpDistance < 0) return new TransferRequestResult(false, TransferError.DistanceUnavailable, null);
         manifest = manifest.ToArray();
         if (manifest.Count == 0)
             return new TransferRequestResult(false, TransferError.EmptyManifest, null);

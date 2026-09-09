@@ -36,6 +36,16 @@ public class TransferEngineScenarioTests
     };
 
     [Fact]
+    public void UnknownDistanceRefusesBeforeReservationDebitOrQueueMutation()
+    {
+        var mutator = new FakeMutator(); var credits = new FakeCredits();
+        var queue = new TransferQueue(5);
+        var engine = new TransferEngine(queue, mutator, credits, Cfg);
+        var result = engine.RequestTransfer("src", "dst", new[] { new TransferManifestLine("iron", 10) }, -1);
+        Assert.False(result.IsSuccess); Assert.Equal(TransferError.DistanceUnavailable, result.Error);
+        Assert.Empty(mutator.Calls); Assert.Empty(credits.Debits); Assert.Empty(engine.Pending);
+    }
+    [Fact]
     public void Scenario_QueueTickDeliver_FiresMutationsInOrder()
     {
         var mutator = new FakeMutator();

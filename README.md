@@ -17,7 +17,7 @@ A BepInEx 5 plugin that adds a HUD button (top-right) which opens a single windo
 ## Install
 
 1. Install BepInEx 5.x in your Vanguard Galaxy folder.
-2. Install [VGModAPI 0.1.2+ within 0.1.x](https://github.com/fankserver/vanguard-galaxy-api). Keep one canonical API copy; do not duplicate its Abstractions DLL in consumer folders.
+2. Install [VGModAPI 0.2.2 or newer](https://github.com/fankserver/vanguard-galaxy-api). Keep one canonical API copy; do not duplicate its Abstractions DLL in consumer folders.
 3. Drop the `VGStockpile/` folder from the release zip into `BepInEx/plugins/`, including Newtonsoft.Json and notices.
 4. Launch the game. Missing/unsupported API or unavailable lifecycle/save capabilities disable Stockpile before sidecar operations.
 
@@ -62,7 +62,9 @@ SaveStarted captures the queue without changing vanilla data; only its matching 
 
 ### API-managed transfer saves (default, experimental)
 
-API-managed saves are enabled by default in VGModAPI and this mod. Set `[Persistence] UseApiSaveData = false` in `vgstockpile.cfg` to use the legacy save files described above. The draft setting `UseCoordinatedPersistence` has been replaced; it is no longer read. Unavailable service fails closed, with no legacy fallback. The API stores transfer JSON in its save-data format (1 MiB limit), never writes legacy sidecars, and gates both queries and mutations on registration readiness. Capture bypasses public query gates without changing reservation, fee, cancellation or delivery logic. Disabled transfers retain loaded jobs for subsequent saves; warning delivery still waits for the HUD.
+Station focus and jump distances use the typed navigation API. Counts are unweighted gate hops, not pass-aware travel eligibility; unavailable counts remain absent from the list. Navigation does not change storage, transfer payloads or inventory generation.
+
+Stockpile 0.8 uses typed lifecycle events and save-data registrations; API 0.1.x is not compatible. Existing transfer payloads, provider identity and legacy-sidecar policy are unchanged. API-managed saves are enabled by default in VGModAPI and this mod. Set `[Persistence] UseApiSaveData = false` in `vgstockpile.cfg` to use the legacy save files described above. The draft setting `UseCoordinatedPersistence` has been replaced; it is no longer read. Unavailable service fails closed, with no legacy fallback. The API stores transfer JSON in its save-data format (1 MiB limit), never writes legacy sidecars, and gates both queries and mutations on registration readiness. Capture bypasses public query gates without changing reservation, fee, cancellation or delivery logic. Disabled transfers retain loaded jobs for subsequent saves; warning delivery still waits for the HUD.
 
 `ImportLegacySidecars = true` explicitly permits read-only adoption when the API has no transfer data for this game save. If a legacy file exists and import is disabled, restoration stops with instructions rather than starting an empty queue. It does not prove that historical sidecar bytes match the vanilla snapshot. Corrupt, future-version, unreadable, malformed or oversized inputs block restoration without overwrite/quarantine. Existing logical transfer schema is retained, including the legacy reader's version-0 compatibility. Registration disposal pauses API-managed saves for all registered mods until another load; status changes are logged. Native two-consumer/recovery qualification and full owner acceptance remain outstanding.
 

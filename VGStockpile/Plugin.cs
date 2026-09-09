@@ -23,12 +23,12 @@ namespace VGStockpile;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInProcess("VanguardGalaxy.exe")]
-[BepInDependency(ModApi.PluginId, "0.1.2")]
+[BepInDependency(ModApi.PluginId, "0.2.2")]
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid    = "vgstockpile";
     public const string PluginName    = "Stockpile";
-    public const string PluginVersion = "0.7.1";
+    public const string PluginVersion = "0.8.0";
 
     internal static Plugin          Instance { get; private set; } = null!;
     internal static ManualLogSource Log      { get; private set; } = null!;
@@ -73,12 +73,12 @@ public class Plugin : BaseUnityPlugin
         RefineryReader  = new RefineryJobReader(Log);
         RefineryBuilder = new RefineryJobsBuilder(Catalog);
 
-        var api = ModApi.Current;
+        var api = ModApi.Services.Lifecycle;
         if (!Chainloader.PluginInfos.TryGetValue(ModApi.PluginId, out var apiPlugin)
             || !TransferLifecycle.IsCompatible(apiPlugin.Metadata.Version, api))
         {
             enabled = false;
-            Log.LogError("Requires VGModAPI 0.1.2+ within 0.1.x with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
+            Log.LogError("Requires VGModAPI 0.2.x with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
             return;
         }
         try
@@ -109,7 +109,7 @@ public class Plugin : BaseUnityPlugin
             var coordinated = Config.Bind("Persistence", "UseApiSaveData", true, "Use API-managed transfer saves. Experimental; disable to use legacy save files.").Value;
             var importLegacy = Config.Bind("Persistence", "ImportLegacySidecars", false, "Read existing transfer files when no API-managed transfer data exists. Sources remain untouched; matching the old queue to this game save is your choice.").Value;
             _lifecycle = coordinated
-                ? new CoordinatedTransfers(api!, ModApi.Persistence ?? throw new System.InvalidOperationException("API-managed saves unavailable. Enable [Persistence] Enabled in vgmodapi.cfg and check API errors, or set [Persistence] UseApiSaveData = false in vgstockpile.cfg for legacy saves."), _engine, importLegacy,
+                ? new CoordinatedTransfers(api!, ModApi.Services.SaveData, _engine, importLegacy,
                     count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message))
                 : new TransferLifecycle(api!, _engine, store, count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message));
             Log.LogInfo($"{PluginName} v{PluginVersion} loaded; waiting for SidePanel. API remains experimental.");
@@ -125,6 +125,7 @@ public class Plugin : BaseUnityPlugin
     private void ResetTransferUi()
     {
         _pendingWarning = 0;
+        Locator.BindSession(null);
         if (_window) _window.Hide();
         if (_refineryWindow) _refineryWindow.Hide();
     }
@@ -157,6 +158,7 @@ public class Plugin : BaseUnityPlugin
     {
         if (_icon != null) return;
         _hudCanvas = hudCanvas;
+        Locator.BindSession(ModApi.Services.Navigation.SessionId);
 
         var clickHandler = new StationRowClickHandler(
             Locator,
@@ -290,6 +292,7 @@ public class Plugin : BaseUnityPlugin
             jumpDistance = ComputeJumpDistance(current?.system?.guid, snap.SystemGuid);
         }
 
+        if (jumpDistance < 0) { Notifications.Toast("Jump distance unavailable; transfer cannot be quoted."); return; }
         TransferDialog.Open(
             _hudCanvas.transform,
             dir, fromName, toName,
@@ -325,6 +328,8 @@ public class Plugin : BaseUnityPlugin
 
         if (string.IsNullOrEmpty(sourceGuid) || string.IsNullOrEmpty(destGuid))
             return new TransferDialogOutcome(false, "Invalid station selection.");
+
+        if (jumpDistance < 0) return new TransferDialogOutcome(false, "Jump distance unavailable; retry when navigation is ready.");
 
         // Fresh source stock for re-validation.
         var live = Reader.CaptureAll();
@@ -369,21 +374,10 @@ public class Plugin : BaseUnityPlugin
 
     private static int ComputeJumpDistance(string? fromSystemGuid, string? toSystemGuid)
     {
-        if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return 0;
-        if (fromSystemGuid == toSystemGuid) return 0;
+        if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return -1;
 
-        var data = GalaxyMapData.current;
-        if (data is null) return 0;
-
-        SystemMapData? from = null;
-        foreach (var s in data.allSystems)
-        {
-            if (s?.guid == fromSystemGuid) { from = s; break; }
-        }
-        if (from is null) return 0;
-
-        var dists = JumpDistances.ComputeFrom(from);
-        return dists.TryGetValue(toSystemGuid, out var d) ? d : 0;
+        var dists = JumpDistances.ComputeFrom(fromSystemGuid);
+        return dists.TryGetValue(toSystemGuid, out var d) ? d : -1;
     }
 
     private void RefreshWindowIfOpen()
@@ -412,6 +406,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var snapshots = Reader.CaptureAll();
+            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _window.Toggle(snapshots);
         }
         catch (System.Exception ex)
@@ -426,6 +421,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var jobs = RefineryReader.CaptureAll();
+            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _refineryWindow.Toggle(jobs);
         }
         catch (System.Exception ex)

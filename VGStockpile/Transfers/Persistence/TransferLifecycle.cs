@@ -8,25 +8,25 @@ namespace VGStockpile.Transfers.Persistence;
 
 internal sealed class TransferLifecycle : ITransferPersistence
 {
-    private readonly ILifecycleApi _api;
-    private readonly ILifecycleDispatchState _dispatch;
+    private readonly ILifecycleService _api;
+
     private readonly TransferEngine? _engine;
     private readonly ITransferStore _store;
     private readonly Action<int> _disabledPending;
     private readonly Action _resetUi;
     private readonly Action<string> _warn;
-    private readonly IDisposable _subscription;
+
     private readonly Dictionary<Guid, TransferSidecar> _saves = new();
     private Guid? _ready;
     private bool _disposed;
     private bool _writeFault;
     private bool _restoreFault;
 
-    internal TransferLifecycle(ILifecycleApi api, TransferEngine? engine, ITransferStore store,
+    internal TransferLifecycle(ILifecycleService api, TransferEngine? engine, ITransferStore store,
         Action<int> disabledPending, Action resetUi, Action<string> warn)
     {
         _api = api;
-        _dispatch = (ILifecycleDispatchState)api;
+
         _engine = engine; _store = store; _disabledPending = disabledPending; _resetUi = resetUi; _warn = warn;
         if (engine != null)
         {
@@ -35,19 +35,18 @@ internal sealed class TransferLifecycle : ITransferPersistence
             engine.UnavailableReason = () => _writeFault || _restoreFault ? TransferError.PersistenceUnavailable : TransferError.SessionUnavailable;
         }
         Clear();
-        _subscription = api.Subscribe("vgstockpile.transfers", Observe);
+        api.Changed += Observe;
         if (api.CurrentSession is { } current && IsCurrentReady(current.Id)) Restore(current);
     }
 
-    internal static bool IsCompatible(Version version, ILifecycleApi? api) => version.Major == 0 && version.Minor == 1
-        && version >= new Version(0, 1, 2) && api is ILifecycleDispatchState
-        && api.Capabilities.Any(c => c.Name == "session-lifecycle" && c.Available)
-        && api.Capabilities.Any(c => c.Name == "save-outcomes" && c.Available);
+    internal static bool IsCompatible(Version version, ILifecycleService? api) => version.Major == 0 && version.Minor == 2
+        && api != null && api.SessionTracking.Availability.IsAvailable && api.SaveOutcomes.Availability.IsAvailable;
 
     public bool CanOperate => CanInspect && !_writeFault;
 
-    private bool CanInspect => !_disposed && _ready.HasValue && _saves.Count == 0
-        && !_dispatch.IsDispatchingCallbacks && _api.CurrentSession is { } current
+    private bool CanInspect => !_disposed && _api.SessionTracking.Availability.IsAvailable
+        && _api.SaveOutcomes.Availability.IsAvailable && _ready.HasValue && _saves.Count == 0
+        && !_api.IsDispatchingCallbacks && _api.CurrentSession is { } current
         && current.Id == _ready && current.Phase == SessionPhase.GameplayInitialized;
 
     private bool IsCurrentReady(Guid id) => _api.CurrentSession is { } s && s.Id == id
@@ -128,7 +127,7 @@ internal sealed class TransferLifecycle : ITransferPersistence
     {
         if (_disposed) return;
         _disposed = true;
-        _subscription.Dispose();
+        _api.Changed -= Observe;
         Clear();
     }
 }

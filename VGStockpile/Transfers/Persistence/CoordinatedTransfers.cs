@@ -6,22 +6,22 @@ namespace VGStockpile.Transfers.Persistence;
 
 internal sealed class CoordinatedTransfers : ITransferPersistence
 {
-    private readonly ILifecycleApi _lifecycle;
+    private readonly ILifecycleService _lifecycle;
     private readonly TransferEngine? _engine;
     private readonly Action _resetUi;
-    private readonly IPersistenceRegistration _registration;
-    private readonly IDisposable _subscription;
+    private readonly ISaveDataRegistration _registration;
+
     private TransferSidecar _retained = TransferSidecar.Empty();
     private Guid? _session;
     private bool _disposed;
 
-    internal CoordinatedTransfers(ILifecycleApi lifecycle, IPersistenceApi api, TransferEngine? engine,
+    internal CoordinatedTransfers(ILifecycleService lifecycle, ISaveDataService api, TransferEngine? engine,
         bool importLegacy, Action<int> disabledPending, Action resetUi, Action<string> warn)
     {
         _lifecycle = lifecycle; _engine = engine; _resetUi = resetUi;
         if (engine != null) { engine.OperationAllowed = () => false; engine.QueryAllowed = () => false; }
         Clear();
-        _registration = api.Register(new PersistenceProvider("vgstockpile", 1,
+        var registration = api.Register(new PersistenceProvider("vgstockpile", 1,
             () => TransferPayloadCodec.Encode(_engine?.Snapshot() ?? _retained),
             (session, payload) =>
             {
@@ -56,20 +56,22 @@ internal sealed class CoordinatedTransfers : ITransferPersistence
                     throw;
                 }
             }, TransferPayloadCodec.IsValid));
-        try { _subscription = lifecycle.Subscribe("vgstockpile.coordinated-ui", Observe); }
+        if (!registration.Succeeded) throw new InvalidOperationException("Transfer save registration refused: " + registration.Status + ": " + registration.Detail);
+        _registration = registration.Registration!;
+        try { lifecycle.Changed += Observe; }
         catch { _registration.Dispose(); throw; }
         if (engine != null)
         {
             engine.ValidateEtaForPersistence = true;
             engine.OperationAllowed = () => CanOperate;
             engine.QueryAllowed = () => CanOperate;
-            engine.UnavailableReason = () => Status is "inactive" or "ready" or "migration-pending"
+            engine.UnavailableReason = () => _registration.State.Kind is SaveDataStateKind.Inactive or SaveDataStateKind.Ready or SaveDataStateKind.Restoring
                 ? TransferError.SessionUnavailable : TransferError.PersistenceUnavailable;
         }
     }
 
-    public bool CanOperate => !_disposed && _registration.MutationAllowed;
-    internal string Status => _registration.Status;
+    public bool CanOperate => !_disposed && _registration.CanMutate;
+    internal string Status => _registration.State.Kind.ToString().ToLowerInvariant();
     private void Clear()
     { _session = null; _retained = TransferSidecar.Empty(); _engine?.Restore(_retained); _resetUi(); }
     private void Observe(LifecycleEvent e)
@@ -81,6 +83,6 @@ internal sealed class CoordinatedTransfers : ITransferPersistence
     public void Dispose()
     {
         if (_disposed) return;
-        _registration.Dispose(); _disposed = true; _subscription.Dispose(); Clear();
+        _registration.Dispose(); _disposed = true; _lifecycle.Changed -= Observe; Clear();
     }
 }

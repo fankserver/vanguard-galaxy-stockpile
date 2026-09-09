@@ -217,18 +217,18 @@ public sealed class TransferLifecycleTests : IDisposable
         public TransferSidecar Load(string path) => Loaded;
         public void Save(string path, TransferSidecar state) { if (Fail) throw new InvalidOperationException("test"); Writes.Add((path, state)); }
     }
-    private sealed class FakeApi : ILifecycleApi, ILifecycleDispatchState
+    private sealed class FakeApi : ILifecycleService
     {
-        private event Action<LifecycleEvent>? Events;
+        public event Action<LifecycleEvent>? Changed;
         public bool IsDispatchingCallbacks { get; set; }
         public SessionSnapshot? CurrentSession { get; set; }
-        public IReadOnlyList<CapabilityStatus> Capabilities { get; } = new[] { new CapabilityStatus("session-lifecycle", true, false, "test"), new CapabilityStatus("save-outcomes", true, false, "test") };
-        public IDisposable Subscribe(string owner, Action<LifecycleEvent> callback) { Events += callback; return new Subscription(() => Events -= callback); }
+        public IServiceStatus SessionTracking { get; } = new TestServiceStatus();
+        public IServiceStatus SaveOutcomes { get; } = new TestServiceStatus();
         internal void Emit(LifecycleEvent e, bool update = true)
         {
             if (update) CurrentSession = e.Session;
             IsDispatchingCallbacks = true;
-            try { Events?.Invoke(e); } finally { IsDispatchingCallbacks = false; }
+            try { Changed?.Invoke(e); } finally { IsDispatchingCallbacks = false; }
         }
     }
     private sealed class Subscription : IDisposable
