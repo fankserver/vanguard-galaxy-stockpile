@@ -13,6 +13,24 @@ namespace VGStockpile.Tests.Transfers.Engine;
 public sealed class CoordinatedTransfersTests
 {
     [Fact]
+    public void RefusedRegistrationDoesNotSubscribeOrEnableTransfers()
+    {
+        var api = new Api { Refuse = true };
+        Assert.Throws<InvalidOperationException>(() => new CoordinatedTransfers(api, api, null, false, _ => { }, () => { }, _ => { }));
+        Assert.Equal(0, api.Subscribers);
+    }
+
+    [Fact]
+    public void DisposalRemovesTypedEventHandler()
+    {
+        var api = new Api();
+        var controller = new CoordinatedTransfers(api, api, null, false, _ => { }, () => { }, _ => { });
+        Assert.Equal(1, api.Subscribers);
+        controller.Dispose(); controller.Dispose();
+        Assert.Equal(0, api.Subscribers);
+    }
+
+    [Fact]
     public void CaptureAndRestorePreserveQueueWithoutSecondDebit()
     {
         var api = new Api(); var materials = new Materials(); var credits = new Credits();
@@ -101,8 +119,10 @@ public sealed class CoordinatedTransfersTests
 
     [Theory]
     [InlineData("0.1.1", false)]
-    [InlineData("0.1.2", true)]
-    [InlineData("0.2.0", false)]
+    [InlineData("0.1.2", false)]
+    [InlineData("0.2.0", true)]
+    [InlineData("0.2.1", true)]
+    [InlineData("0.3.0", false)]
     public void RequiresNewPersistenceContract(string version, bool expected)
         => Assert.Equal(expected, TransferLifecycle.IsCompatible(new Version(version), new Api()));
 
@@ -135,28 +155,35 @@ public sealed class CoordinatedTransfersTests
         public int Current { get; private set; } = 10000;
         public bool TryDebit(int amount) { if (Current < amount) return false; Current -= amount; return true; }
     }
-    private sealed class Api : IPersistenceApi, ILifecycleApi, ILifecycleDispatchState
+    private sealed class Api : ISaveDataService, ILifecycleService
     {
+        internal bool Refuse;
+        internal int Subscribers => Changed?.GetInvocationList().Length ?? 0;
         internal PersistenceProvider? Provider;
         internal Handle Handle = new();
-        private event Action<LifecycleEvent>? Events;
+        public event Action<LifecycleEvent>? Changed;
         public SessionSnapshot? CurrentSession { get; private set; }
         public bool IsDispatchingCallbacks => false;
-        public IReadOnlyList<CapabilityStatus> Capabilities { get; } = new[] { new CapabilityStatus("session-lifecycle", true, false, "test"), new CapabilityStatus("save-outcomes", true, false, "test") };
-        public IPersistenceRegistration Register(PersistenceProvider provider) { Provider = provider; Handle = new Handle(); return Handle; }
-        public IDisposable Subscribe(string owner, Action<LifecycleEvent> callback) { Events += callback; return new Subscription(() => Events -= callback); }
+        public IServiceStatus SessionTracking { get; } = new TestServiceStatus();
+        public IServiceStatus SaveOutcomes { get; } = new TestServiceStatus();
+        public ServiceAvailability Availability => ServiceAvailability.Available;
+        public event Action<ServiceAvailability>? AvailabilityChanged { add { } remove { } }
+        public SaveDataRegistrationResult Register(PersistenceProvider provider) { if (Refuse) return new SaveDataRegistrationResult(SaveDataRegistrationStatus.Unavailable); Provider = provider; Handle = new Handle(); return new SaveDataRegistrationResult(SaveDataRegistrationStatus.Registered, Handle); }
         internal void Restore(byte[]? payload, string? path = null)
         {
             Handle.MutationAllowed = false;
             CurrentSession = new SessionSnapshot(Guid.NewGuid(), SessionPhase.GameplayInitialized, SessionOrigin.SaveLoad, path);
             Provider!.Restore(CurrentSession, payload); Handle.MutationAllowed = true;
         }
-        internal void Emit(LifecycleEvent e) { Handle.MutationAllowed = false; Events?.Invoke(e); }
+        internal void Emit(LifecycleEvent e) { Handle.MutationAllowed = false; Changed?.Invoke(e); }
     }
-    private sealed class Handle : IPersistenceRegistration
+    private sealed class Handle : ISaveDataRegistration
     {
         public bool MutationAllowed { get; set; }
-        public string Status => MutationAllowed ? "ready" : "inactive";
+        public bool CanMutate => MutationAllowed;
+        public bool CanRead => MutationAllowed;
+        public SaveDataState State => MutationAllowed ? new SaveDataState(SaveDataStateKind.Ready, Guid.Parse("11111111-1111-1111-1111-111111111111")) : new SaveDataState(SaveDataStateKind.Inactive);
+        public event Action<SaveDataState>? StateChanged { add { } remove { } }
         public void Dispose() => MutationAllowed = false;
     }
     private sealed class Subscription : IDisposable

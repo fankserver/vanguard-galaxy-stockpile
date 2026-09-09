@@ -37,7 +37,7 @@ refresh-asm:
 link-api:
 	@test -f "$(VGAPI_DLL)" || { echo 'Build the sibling API Release package first.'; exit 1; }
 	@mkdir -p VGStockpile/lib
-	ln -sf "$(abspath $(VGAPI_DLL))" VGStockpile/lib/VGModAPI.Abstractions.dll
+	ln -sf "$$(realpath "$(VGAPI_DLL)")" VGStockpile/lib/VGModAPI.Abstractions.dll
 
 build: link-asm link-api
 	DOTNET_ROOT=$(dir $(DOTNET)) $(DOTNET) build VGStockpile/VGStockpile.csproj -c $(CONFIG)

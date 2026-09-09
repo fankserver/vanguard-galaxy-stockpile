@@ -23,12 +23,12 @@ namespace VGStockpile;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInProcess("VanguardGalaxy.exe")]
-[BepInDependency(ModApi.PluginId, "0.1.2")]
+[BepInDependency(ModApi.PluginId, "0.2.0")]
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid    = "vgstockpile";
     public const string PluginName    = "Stockpile";
-    public const string PluginVersion = "0.7.1";
+    public const string PluginVersion = "0.8.0";
 
     internal static Plugin          Instance { get; private set; } = null!;
     internal static ManualLogSource Log      { get; private set; } = null!;
@@ -73,12 +73,12 @@ public class Plugin : BaseUnityPlugin
         RefineryReader  = new RefineryJobReader(Log);
         RefineryBuilder = new RefineryJobsBuilder(Catalog);
 
-        var api = ModApi.Current;
+        var api = ModApi.Services.Lifecycle;
         if (!Chainloader.PluginInfos.TryGetValue(ModApi.PluginId, out var apiPlugin)
             || !TransferLifecycle.IsCompatible(apiPlugin.Metadata.Version, api))
         {
             enabled = false;
-            Log.LogError("Requires VGModAPI 0.1.2+ within 0.1.x with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
+            Log.LogError("Requires VGModAPI 0.2.x with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
             return;
         }
         try
@@ -109,7 +109,7 @@ public class Plugin : BaseUnityPlugin
             var coordinated = Config.Bind("Persistence", "UseApiSaveData", true, "Use API-managed transfer saves. Experimental; disable to use legacy save files.").Value;
             var importLegacy = Config.Bind("Persistence", "ImportLegacySidecars", false, "Read existing transfer files when no API-managed transfer data exists. Sources remain untouched; matching the old queue to this game save is your choice.").Value;
             _lifecycle = coordinated
-                ? new CoordinatedTransfers(api!, ModApi.Persistence ?? throw new System.InvalidOperationException("API-managed saves unavailable. Enable [Persistence] Enabled in vgmodapi.cfg and check API errors, or set [Persistence] UseApiSaveData = false in vgstockpile.cfg for legacy saves."), _engine, importLegacy,
+                ? new CoordinatedTransfers(api!, ModApi.Services.SaveData, _engine, importLegacy,
                     count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message))
                 : new TransferLifecycle(api!, _engine, store, count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message));
             Log.LogInfo($"{PluginName} v{PluginVersion} loaded; waiting for SidePanel. API remains experimental.");
