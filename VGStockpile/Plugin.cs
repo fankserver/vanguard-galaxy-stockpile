@@ -4,14 +4,13 @@ using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Bootstrap;
 using VGModAPI;
-using HarmonyLib;
+using VGModAPI.Unity;
 using Source.Galaxy;
 using Source.Galaxy.POI;
 using UnityEngine;
 using VGStockpile.Config;
 using VGStockpile.Data;
 using VGStockpile.Locate;
-using VGStockpile.Patches;
 using VGStockpile.Transfers;
 using VGStockpile.Transfers.Engine;
 using VGStockpile.Transfers.Persistence;
@@ -23,12 +22,12 @@ namespace VGStockpile;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInProcess("VanguardGalaxy.exe")]
-[BepInDependency(ModApi.PluginId, "0.2.2")]
+[BepInDependency(ModApi.PluginId, "0.2.8")]
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid    = "vgstockpile";
     public const string PluginName    = "Stockpile";
-    public const string PluginVersion = "0.8.1";
+    public const string PluginVersion = "0.9.0";
 
     internal static Plugin          Instance { get; private set; } = null!;
     internal static ManualLogSource Log      { get; private set; } = null!;
@@ -45,8 +44,8 @@ public class Plugin : BaseUnityPlugin
     private StationStorageWindow?    _window;
     private RefineryJobsIcon?        _refineryIcon;
     private RefineryJobsWindow?      _refineryWindow;
-    private Canvas?                  _hudCanvas;
-    private Harmony                  _harmony = null!;
+    private IGameplayUiService?      _gameplayUi;
+    private GameplayUiContainer?     _container;
 
     internal TransferEngine?          _engine;
     internal MaterialStorageMutator?  _mutator;
@@ -57,8 +56,6 @@ public class Plugin : BaseUnityPlugin
     private string? _lastPersistenceStatus;
     private TransferEngineDriver? _driver;
     private int _pendingWarning;
-
-    public bool IconAttached => _icon != null;
 
     private void Awake()
     {
@@ -103,16 +100,18 @@ public class Plugin : BaseUnityPlugin
                 Log.LogInfo("VGStockpile transfers enabled.");
             }
 
-            // HUD readiness remains tied to the inspected SidePanel.Start boundary.
-            _harmony = new Harmony(PluginGuid);
-            _harmony.PatchAll(typeof(SidePanelReadyPatch));
+            // The API owns gameplay UI readiness; subscribe first, then read Current so a
+            // host that already exists is not missed. Notifications never replay.
+            _gameplayUi = ModApi.Services.GameplayUi;
+            _gameplayUi.Changed += OnGameplayUiChanged;
             var coordinated = Config.Bind("Persistence", "UseApiSaveData", true, "Use API-managed transfer saves. Experimental; disable to use legacy save files.").Value;
             var importLegacy = Config.Bind("Persistence", "ImportLegacySidecars", false, "Read existing transfer files when no API-managed transfer data exists. Sources remain untouched; matching the old queue to this game save is your choice.").Value;
             _lifecycle = coordinated
                 ? new CoordinatedTransfers(api!, ModApi.Services.SaveData, _engine, importLegacy,
                     count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message))
                 : new TransferLifecycle(api!, _engine, store, count => _pendingWarning = count, ResetTransferUi, message => Log.LogWarning(message));
-            Log.LogInfo($"{PluginName} v{PluginVersion} loaded; waiting for SidePanel. API remains experimental.");
+            AttachUi(_gameplayUi.Current);
+            Log.LogInfo($"{PluginName} v{PluginVersion} loaded; waiting for the gameplay UI host. API remains experimental.");
         }
         catch (System.Exception error)
         {
@@ -145,19 +144,45 @@ public class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        if (_gameplayUi != null) _gameplayUi.Changed -= OnGameplayUiChanged;
         _lifecycle?.Dispose();
         if (_driver) Destroy(_driver);
+        DetachUi();
+    }
+
+    /// <summary>Teardown arrives before readiness, so a replaced host rebuilds rather than resurrects.</summary>
+    private void OnGameplayUiChanged(GameplayUiChange change)
+    {
+        if (change.Previous != null && ReferenceEquals(change.Previous, _container?.Host)) DetachUi();
+        if (change.Current != null) AttachUi(change.Current);
+    }
+
+    /// <summary>Drops this mod's content and its container lease; the API destroys the owned root.</summary>
+    private void DetachUi()
+    {
         if (_window) Destroy(_window.gameObject);
         if (_refineryWindow) Destroy(_refineryWindow.gameObject);
         if (_icon) Destroy(_icon.gameObject);
         if (_refineryIcon) Destroy(_refineryIcon.gameObject);
-        _harmony?.UnpatchSelf();
+        _window = null; _refineryWindow = null; _icon = null; _refineryIcon = null;
+        _container?.Dispose();
+        _container = null;
     }
 
-    internal void AttachIcon(Canvas hudCanvas)
+    private void AttachUi(GameplayUiSnapshot? host)
     {
-        if (_icon != null) return;
-        _hudCanvas = hudCanvas;
+        if (host is null || _gameplayUi is null) return;
+        if (ReferenceEquals(host, _container?.Host)) return;
+        var status = _gameplayUi.CreateContainer(host, PluginGuid, "windows", out var container);
+        if (status != GameplayUiContainerStatus.Created || container is null)
+        {
+            // No retry, timeout or singleton lookup: another readiness notification is the only signal.
+            Log.LogWarning($"Gameplay UI host refused ({status}); Stockpile UI stays detached.");
+            return;
+        }
+        DetachUi();
+        _container = container;
+        var hudRoot = container.Root;
         Locator.BindSession(ModApi.Services.Navigation.SessionId);
 
         var clickHandler = new StationRowClickHandler(
@@ -170,7 +195,7 @@ public class Plugin : BaseUnityPlugin
         TransferConfig? transferCfg = transfersEnabled ? Cfg.ToTransferConfig() : null;
 
         _window = StationStorageWindow.Create(
-            hudCanvas,
+            hudRoot,
             Builder,
             Catalog,
             initialActive:    () => Cfg.GetActive(),
@@ -189,14 +214,14 @@ public class Plugin : BaseUnityPlugin
             onShowEmptyRefineriesChanged: v => Cfg.ShowEmptyRefineries.Value = v);
 
         _icon = StationStorageIcon.Create(
-            hudCanvas,
+            hudRoot,
             onClick: ToggleWindow,
             rightPadding: Cfg.IconRightPadding.Value,
             topPadding:   Cfg.IconTopPadding.Value,
             log:          Log);
 
         _refineryWindow = RefineryJobsWindow.Create(
-            hudCanvas, RefineryBuilder, Catalog,
+            hudRoot, RefineryBuilder, Catalog,
             capture: () => RefineryReader.CaptureAll(),
             onStationClick: guid =>
             {
@@ -208,13 +233,13 @@ public class Plugin : BaseUnityPlugin
         // Place the refinery-jobs icon to the left of the stockpile icon
         // (icons are 40px wide; +48 leaves an 8px gap), same top edge.
         _refineryIcon = RefineryJobsIcon.Create(
-            hudCanvas,
+            hudRoot,
             onClick: ToggleRefineryWindow,
             rightPadding: Cfg.IconRightPadding.Value + 48f,
             topPadding:   Cfg.IconTopPadding.Value,
             log:          Log);
 
-        Log.LogInfo($"VGStockpile icon attached to canvas '{hudCanvas.name}'.");
+        Log.LogInfo($"VGStockpile UI attached to gameplay host {host.Id}.");
     }
 
     private StationContext BuildStationContextFor(string guid)
@@ -256,7 +281,8 @@ public class Plugin : BaseUnityPlugin
     private void OpenTransferDialog(StationStorageSnapshot snap, TransferDirection dir)
     {
         if (_engine is null || _ctxAdapter is null) return;
-        if (_hudCanvas is null) { Log.LogWarning("Cannot open dialog: no HUD canvas."); return; }
+        // Created on player input, long after attach; the lease keeps the parent valid.
+        if (_container?.IsValid != true) { Log.LogWarning("Cannot open dialog: no gameplay UI host."); return; }
 
         var current = SpaceStation.current;
         if (current is null)
@@ -294,7 +320,7 @@ public class Plugin : BaseUnityPlugin
 
         if (jumpDistance < 0) { Notifications.Toast("Jump distance unavailable; transfer cannot be quoted."); return; }
         TransferDialog.Open(
-            _hudCanvas.transform,
+            _container.Root,
             dir, fromName, toName,
             sourceStock, Cfg.ToTransferConfig(), jumpDistance,
             Catalog,

@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>VGStockpile</AssemblyName>
     <Product>Stockpile</Product>
-    <Version>0.8.1</Version>
+    <Version>0.9.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>VGStockpile</RootNamespace>
@@ -20,7 +20,6 @@
     <PackageReference Include="BepInEx.Core" Version="5.*" IncludeAssets="compile" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" IncludeAssets="compile" />
     <PackageReference Include="UnityEngine.Modules" Version="6000.2.6" IncludeAssets="compile" />
-    <PackageReference Include="HarmonyX" Version="2.10.*" IncludeAssets="compile" />
     <!-- Ships at runtime (CopyLocalLockFileAssemblies → bin → deploy): game
          0.8.1 removed Newtonsoft.Json.dll from Managed/, so plugins must carry it. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" IncludeAssets="compile;runtime" />
@@ -29,6 +28,11 @@
   <ItemGroup>
     <Reference Include="VGModAPI.Abstractions">
       <HintPath>lib/VGModAPI.Abstractions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Optional typed Unity bridge; shipped by the API package, never bundled here. -->
+    <Reference Include="VGModAPI.Unity">
+      <HintPath>lib/VGModAPI.Unity.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Assembly-CSharp" Condition="Exists('lib/Assembly-CSharp.dll')">

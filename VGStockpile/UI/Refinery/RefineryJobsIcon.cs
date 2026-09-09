@@ -22,7 +22,7 @@ internal sealed class RefineryJobsIcon : MonoBehaviour
     private bool            _resolved    = false;
 
     public static RefineryJobsIcon Create(
-        Canvas hudCanvas,
+        RectTransform hudRoot,
         Action onClick,
         float rightPadding,
         float topPadding,
@@ -31,7 +31,7 @@ internal sealed class RefineryJobsIcon : MonoBehaviour
         var go = new GameObject("VGStockpile.RefineryIcon",
             typeof(RectTransform), typeof(Image), typeof(Button),
             typeof(RefineryJobsIcon));
-        go.transform.SetParent(hudCanvas.transform, worldPositionStays: false);
+        go.transform.SetParent(hudRoot, worldPositionStays: false);
 
         var rt = (RectTransform)go.transform;
         rt.anchorMin = new Vector2(1f, 1f);

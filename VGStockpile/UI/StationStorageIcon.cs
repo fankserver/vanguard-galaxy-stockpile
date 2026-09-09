@@ -21,7 +21,7 @@ internal sealed class StationStorageIcon : MonoBehaviour
     private bool            _resolved    = false;
 
     public static StationStorageIcon Create(
-        Canvas hudCanvas,
+        RectTransform hudRoot,
         Action onClick,
         float rightPadding,
         float topPadding,
@@ -30,7 +30,7 @@ internal sealed class StationStorageIcon : MonoBehaviour
         var go = new GameObject("VGStockpile.Icon",
             typeof(RectTransform), typeof(Image), typeof(Button),
             typeof(StationStorageIcon));
-        go.transform.SetParent(hudCanvas.transform, worldPositionStays: false);
+        go.transform.SetParent(hudRoot, worldPositionStays: false);
 
         var rt = (RectTransform)go.transform;
         rt.anchorMin = new Vector2(1f, 1f);

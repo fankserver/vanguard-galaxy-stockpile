@@ -60,7 +60,7 @@ internal sealed class StationStorageWindow : MonoBehaviour
     private static readonly Color BtnInactive = new(0.20f, 0.20f, 0.20f, 0.80f);
 
     public static StationStorageWindow Create(
-        Canvas hudCanvas,
+        RectTransform hudRoot,
         StorageGridBuilder builder,
         MaterialCatalog catalog,
         Func<HashSet<MaterialCategory>> initialActive,
@@ -82,7 +82,7 @@ internal sealed class StationStorageWindow : MonoBehaviour
             "VGStockpile.Window",
             typeof(RectTransform), typeof(CanvasGroup), typeof(Image),
             typeof(StationStorageWindow));
-        go.transform.SetParent(hudCanvas.transform, worldPositionStays: false);
+        go.transform.SetParent(hudRoot, worldPositionStays: false);
 
         var w = go.GetComponent<StationStorageWindow>();
         w._root               = (RectTransform)go.transform;
