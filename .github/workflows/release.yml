@@ -21,4 +21,15 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       - run: gh release download "$TAG" --pattern 'VGStockpile.zip' --dir dist
-      - run: python3 tools/package.py --check dist/VGStockpile.zip
+      - run: python3 tools/package.py --check dist/VGStockpile.zip --tag "$TAG"
+      - run: gh release download "$TAG" --pattern 'update.json' --dir dist
+      - name: Feed must advertise this exact tag and identity
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          tag = os.environ["TAG"]
+          feed = json.loads(pathlib.Path("dist/update.json").read_text())
+          assert feed == {"schemaVersion": 1, "pluginId": "vgstockpile", "channel": "stable",
+                          "version": tag.lstrip("v"),
+                          "releaseUrl": "https://github.com/fankserver/vanguard-galaxy-stockpile/releases/tag/" + tag}, feed
+          PY

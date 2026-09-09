@@ -1,9 +1,13 @@
+import json
 import pathlib
 import stat
 import tempfile
 import unittest
 import zipfile
-from package import NAMES, validate
+from package import METADATA, NAMES, check_compiled_version, check_metadata, resource_version, validate
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SIDECAR = (ROOT / METADATA).read_bytes()
 
 
 class PackageTests(unittest.TestCase):
@@ -19,7 +23,8 @@ class PackageTests(unittest.TestCase):
                         if change == "symlink" and name == "LICENSE":
                             info.create_system = 3
                             info.external_attr = (stat.S_IFLNK | 0o777) << 16
-                        archive.writestr(info, b"" if change == "empty" else b"synthetic")
+                        payload = SIDECAR if name == METADATA else b"synthetic"
+                        archive.writestr(info, b"" if change == "empty" else payload)
                     if change in ("extra", "traversal"):
                         archive.writestr("VGStockpile/Assembly-CSharp.dll" if change == "extra" else "../outside", b"synthetic")
                 if change == "valid":
@@ -27,6 +32,46 @@ class PackageTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         validate(path)
+
+    def test_shipped_sidecar_is_valid(self):
+        metadata = check_metadata(SIDECAR)
+        self.assertEqual("vgstockpile", metadata["pluginId"])
+        self.assertTrue(metadata["description"].strip())
+
+    def test_sidecar_rejections(self):
+        base = json.loads(SIDECAR)
+        for change in ({"pluginId": "vgmodapi"}, {"channel": "experimental"}, {"schemaVersion": 2},
+                       {"version": "1.2.3"}, {"description": ""}, {"unknown": "x"},
+                       {"updateUrl": "https://example.org/update.json"}):
+            with self.subTest(change=change):
+                with self.assertRaises(ValueError):
+                    check_metadata(json.dumps({**base, **change}).encode("utf-8"))
+        with self.assertRaises(ValueError):
+            check_metadata(b'{"schemaVersion":1,"pluginId":"vgstockpile","pluginId":"vgstockpile"}')
+
+    def test_compiled_version_gate(self):
+        built = ROOT / "VGStockpile/bin/Release/netstandard2.1/VGStockpile.dll"
+        if not built.is_file():
+            self.skipTest("Build the plugin before running packaging tests")
+        data = built.read_bytes()
+        version = resource_version(data, "Assembly Version").rsplit(".", 1)[0]
+        check_compiled_version(data, version)
+        major, minor, patch = version.split(".")
+        for other in (f"{major}.{minor}.{int(patch) + 1}", f"{major}.{int(minor) + 1}.{patch}"):
+            with self.subTest(version=other), self.assertRaises(ValueError):
+                check_compiled_version(data, other)
+
+    def test_reference_versions_cannot_satisfy_the_gate(self):
+        """A referenced assembly's version string must never stand in for our own."""
+        built = ROOT / "VGStockpile/bin/Release/netstandard2.1/VGStockpile.dll"
+        if not built.is_file():
+            self.skipTest("Build the plugin before running packaging tests")
+        data = built.read_bytes()
+        self.assertIn(b"Assembly-CSharp, Version=0.0.0.0", data)
+        with self.assertRaises(ValueError):
+            check_compiled_version(data, "0.0.0")
+        with self.assertRaises(ValueError):
+            check_compiled_version(b"no version resource here", "0.8.1")
 
 
 if __name__ == "__main__":
