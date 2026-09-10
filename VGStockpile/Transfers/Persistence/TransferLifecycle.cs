@@ -44,9 +44,11 @@ internal sealed class TransferLifecycle : ITransferPersistence
 
     public bool CanOperate => CanInspect && !_writeFault;
 
+    // No dispatch check: the API no longer delivers callbacks at a moment where acting is unsafe,
+    // so consumers do not re-derive that condition.
     private bool CanInspect => !_disposed && _api.SessionTracking.Availability.IsAvailable
         && _api.SaveOutcomes.Availability.IsAvailable && _ready.HasValue && _saves.Count == 0
-        && !_api.IsDispatchingCallbacks && _api.CurrentSession is { } current
+        && _api.CurrentSession is { } current
         && current.Id == _ready && current.Phase == SessionPhase.GameplayInitialized;
 
     private bool IsCurrentReady(Guid id) => _api.CurrentSession is { } s && s.Id == id

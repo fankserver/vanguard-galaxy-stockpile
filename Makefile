@@ -16,6 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo /tmp/dnsdk/dotnet/dotnet
 export DOTNET_ROLL_FORWARD := LatestMajor
 
 VGAPI_DLL ?= ../vanguard-galaxy-api/VGModAPI.Abstractions/bin/Release/netstandard2.1/VGModAPI.Abstractions.dll
+VGAPI_UNITY_DLL ?= ../vanguard-galaxy-api/VGModAPI/bin/Release/netstandard2.1/VGModAPI.Unity.dll
 
 .PHONY: all build link-asm refresh-asm link-api deploy clean test package
 
@@ -36,8 +37,10 @@ refresh-asm:
 
 link-api:
 	@test -f "$(VGAPI_DLL)" || { echo 'Build the sibling API Release package first.'; exit 1; }
+	@test -f "$(VGAPI_UNITY_DLL)" || { echo 'Build the sibling API Release package first (VGModAPI.Unity).'; exit 1; }
 	@mkdir -p VGStockpile/lib
 	ln -sf "$$(realpath "$(VGAPI_DLL)")" VGStockpile/lib/VGModAPI.Abstractions.dll
+	ln -sf "$$(realpath "$(VGAPI_UNITY_DLL)")" VGStockpile/lib/VGModAPI.Unity.dll
 
 build: link-asm link-api
 	DOTNET_ROOT=$(dir $(DOTNET)) $(DOTNET) build VGStockpile/VGStockpile.csproj -c $(CONFIG)

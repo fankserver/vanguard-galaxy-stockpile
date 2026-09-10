@@ -105,14 +105,6 @@ public sealed class TransferLifecycleTests : IDisposable
         Finish(id); Assert.Empty(_store.Writes); Assert.Empty(_engine.Pending);
     }
     [Fact]
-    public void DispatchItselfBlocksMutationsWithoutAnObservedSave()
-    {
-        Ready(); Request(); _api.IsDispatchingCallbacks = true;
-        Assert.Empty(_engine.Tick(float.MaxValue)); Assert.Equal(0, _materials.Destination);
-        _api.IsDispatchingCallbacks = false;
-        Assert.Single(_engine.Tick(float.MaxValue));
-    }
-    [Fact]
     public void NestedSaveCompletionDoesNotUnfreezeOuterSave()
     {
         Ready(); Request(); var outer = Start(); var inner = Start("inner.save");
@@ -220,15 +212,15 @@ public sealed class TransferLifecycleTests : IDisposable
     private sealed class FakeApi : ILifecycleService
     {
         public event Action<LifecycleEvent>? Changed;
-        public bool IsDispatchingCallbacks { get; set; }
         public SessionSnapshot? CurrentSession { get; set; }
         public IServiceStatus SessionTracking { get; } = new TestServiceStatus();
         public IServiceStatus SaveOutcomes { get; } = new TestServiceStatus();
         internal void Emit(LifecycleEvent e, bool update = true)
         {
             if (update) CurrentSession = e.Session;
-            IsDispatchingCallbacks = true;
-            try { Changed?.Invoke(e); } finally { IsDispatchingCallbacks = false; }
+            // No dispatch flag: the API no longer delivers a callback at an unsafe moment,
+            // so this consumer neither observes nor re-derives that condition.
+            Changed?.Invoke(e);
         }
     }
     private sealed class Subscription : IDisposable

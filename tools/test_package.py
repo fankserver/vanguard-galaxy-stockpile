@@ -62,14 +62,15 @@ class PackageTests(unittest.TestCase):
                 check_compiled_version(data, other)
 
     def test_reference_versions_cannot_satisfy_the_gate(self):
-        """A referenced assembly's version string must never stand in for our own."""
-        built = ROOT / "VGStockpile/bin/Release/netstandard2.1/VGStockpile.dll"
-        if not built.is_file():
-            self.skipTest("Build the plugin before running packaging tests")
-        data = built.read_bytes()
-        self.assertIn(b"Assembly-CSharp, Version=0.0.0.0", data)
-        with self.assertRaises(ValueError):
-            check_compiled_version(data, "0.0.0")
+        """A referenced assembly's version string must never stand in for our own.
+
+        Reference and type strings carrying versions are incidental to what the build
+        happens to reference, so this uses a synthetic payload rather than asserting a
+        particular reference survives in the shipped assembly."""
+        for payload, version in ((b"Assembly-CSharp, Version=0.0.0.0, Culture=neutral", "0.0.0"),
+                                 (b"Some.Other, Version=1.2.3.0, PublicKeyToken=null", "1.2.3")):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                check_compiled_version(payload, version)
         with self.assertRaises(ValueError):
             check_compiled_version(b"no version resource here", "0.8.1")
 

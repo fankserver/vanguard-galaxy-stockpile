@@ -51,7 +51,7 @@ internal sealed class RefineryJobsWindow : MonoBehaviour
     }
 
     public static RefineryJobsWindow Create(
-        Canvas hudCanvas,
+        RectTransform hudRoot,
         RefineryJobsBuilder builder,
         MaterialCatalog catalog,
         Func<IReadOnlyList<RefineryJobSnapshot>> capture,
@@ -60,7 +60,7 @@ internal sealed class RefineryJobsWindow : MonoBehaviour
     {
         var go = new GameObject("VGRefineryJobsWindow",
             typeof(RectTransform), typeof(Image), typeof(RefineryJobsWindow));
-        go.transform.SetParent(hudCanvas.transform, worldPositionStays: false);
+        go.transform.SetParent(hudRoot, worldPositionStays: false);
 
         var w = go.GetComponent<RefineryJobsWindow>();
         w._root           = (RectTransform)go.transform;
