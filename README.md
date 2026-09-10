@@ -55,11 +55,11 @@ Three internal areas:
 
 - **`Data/`** — pure read side. `StationStorageReader` walks the galaxy POIs, reads each `SpaceStation.materialStorage`, returns immutable `StationStorageSnapshot` records. `MaterialCatalog` resolves `InventoryItemType` references and classifies materials into the `MaterialCategory` enum.
 - **`UI/`** — UGUI rendering. `StorageGridBuilder` (pure, unit-tested) computes columns + sorted rows. `StationStorageWindow` and `RefineryJobsWindow` are the Unity-touching layer; their launchers are shared HUD registrations, not owned icons.
-- **`Locate/`** — `IStationLocator` + production `StationLocator`, which focuses a station through the Mod API navigation service for the bound session.
+- **`Locate/`** — `IStationLocator` + production `StationLocator`, which focuses a station through the navigation of the captured game it is bound to. An ended game refuses rather than focusing a replacement game's map.
 
 ## Transfer lifecycle boundaries
 
-Queue restoration waits for PlayerReady; mutations/ticks wait for the matching GameplayInitialized session and run outside API callback delivery or in-flight saves. Session replacement clears pending memory without returning old-world inventory into a new world.
+Queue restoration waits for PlayerReady; mutations/ticks wait for the matching GameplayInitialized session and outside in-flight saves. Session replacement clears pending memory without returning old-world inventory into a new world. Callback-delivery timing is not re-derived here: the API does not deliver a reaction at a moment where acting would be unsafe.
 
 ## UI attachment
 

@@ -5,19 +5,18 @@ namespace VGStockpile.Data;
 
 internal static class JumpDistances
 {
-    internal static IReadOnlyDictionary<string, int> ComputeFromCurrent()
-        => ComputeFrom(ModApi.Services.Travel.CurrentLocation?.SystemId);
+    internal static IReadOnlyDictionary<string, int> ComputeFromCurrent(IGame? game)
+        => ComputeFrom(ModApi.Services.Travel.CurrentLocation?.SystemId, game);
 
     // Counts are unweighted gate hops, not access-aware route eligibility.
-    internal static IReadOnlyDictionary<string, int> ComputeFrom(string? systemId)
+    internal static IReadOnlyDictionary<string, int> ComputeFrom(string? systemId, IGame? game)
     {
-        if (string.IsNullOrEmpty(systemId)) return new Dictionary<string, int>();
-        return ComputeFrom(systemId, ModApi.Services.Navigation);
+        if (string.IsNullOrEmpty(systemId) || game is not { IsActive: true }) return new Dictionary<string, int>();
+        return ComputeFrom(systemId!, game.Navigation);
     }
-    internal static IReadOnlyDictionary<string, int> ComputeFrom(string systemId, INavigationService navigation)
+    internal static IReadOnlyDictionary<string, int> ComputeFrom(string systemId, INavigation navigation)
     {
-        if (navigation.SessionId is not System.Guid session) return new Dictionary<string, int>();
-        var result = navigation.GetJumpCounts(session, systemId);
+        var result = navigation.GetJumpCounts(systemId);
         return result.Status == NavigationStatus.Succeeded ? result.Hops : new Dictionary<string, int>();
     }
 }

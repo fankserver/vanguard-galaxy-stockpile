@@ -46,6 +46,8 @@ public class Plugin : BaseUnityPlugin
     private IHudRegistration?        _refineryLauncher;
     private IGameplayUiService?      _gameplayUi;
     private GameplayUiContainer?     _container;
+    // The captured game the UI is showing; a replacement game arrives as a new Started event.
+    private IGame?                   _game;
 
     internal TransferEngine?          _engine;
     internal MaterialStorageMutator?  _mutator;
@@ -104,6 +106,11 @@ public class Plugin : BaseUnityPlugin
             // host that already exists is not missed. Notifications never replay.
             _gameplayUi = ModApi.Services.GameplayUi;
             _gameplayUi.Changed += OnGameplayUiChanged;
+            // One subscription for the plugin lifetime; the argument owns its game, so no
+            // session tokens or current-game lookups are threaded through the mod.
+            ModApi.Services.Game.Started += OnGameStarted;
+            _game = ModApi.Services.Game.Current;
+            Locator.BindGame(_game);
             // Registered once for this plugin's lifetime; the API owns corner placement
             // and coordinates slots with every other mod, so no offsets are chosen here.
             _launcher = ModApi.Services.Hud.Register(PluginGuid, "stockpile", _ => ToggleWindow());
@@ -128,7 +135,7 @@ public class Plugin : BaseUnityPlugin
     private void ResetTransferUi()
     {
         _pendingWarning = 0;
-        Locator.BindSession(null);
+        Locator.BindGame(null);
         if (_window) _window.Hide();
         if (_refineryWindow) _refineryWindow.Hide();
     }
@@ -156,6 +163,12 @@ public class Plugin : BaseUnityPlugin
         DetachUi();
         _launcher?.Dispose(); _refineryLauncher?.Dispose();
         _launcher = null; _refineryLauncher = null;
+    }
+
+    private void OnGameStarted(IGame game)
+    {
+        _game = game;
+        Locator.BindGame(game);
     }
 
     /// <summary>Teardown arrives before readiness, so a replaced host rebuilds rather than resurrects.</summary>
@@ -207,7 +220,7 @@ public class Plugin : BaseUnityPlugin
         DetachUi();
         _container = container;
         var hudRoot = container.Root;
-        Locator.BindSession(ModApi.Services.Navigation.SessionId);
+        Locator.BindGame(_game);
 
         var clickHandler = new StationRowClickHandler(
             Locator,
@@ -235,7 +248,8 @@ public class Plugin : BaseUnityPlugin
             onLocateByGuid:           transfersEnabled ? guid => Locator.LocateByGuid(guid) : null,
             stationDisplayNameByGuid: transfersEnabled ? ResolveStationName : null,
             initialShowEmptyRefineries:   () => Cfg.ShowEmptyRefineries.Value,
-            onShowEmptyRefineriesChanged: v => Cfg.ShowEmptyRefineries.Value = v);
+            onShowEmptyRefineriesChanged: v => Cfg.ShowEmptyRefineries.Value = v,
+            jumpDistanceSource:           () => JumpDistances.ComputeFromCurrent(_game));
 
         _refineryWindow = RefineryJobsWindow.Create(
             hudRoot, RefineryBuilder, Catalog,
@@ -409,11 +423,11 @@ public class Plugin : BaseUnityPlugin
         return new TransferDialogOutcome(true, null);
     }
 
-    private static int ComputeJumpDistance(string? fromSystemGuid, string? toSystemGuid)
+    private int ComputeJumpDistance(string? fromSystemGuid, string? toSystemGuid)
     {
         if (string.IsNullOrEmpty(fromSystemGuid) || string.IsNullOrEmpty(toSystemGuid)) return -1;
 
-        var dists = JumpDistances.ComputeFrom(fromSystemGuid);
+        var dists = JumpDistances.ComputeFrom(fromSystemGuid, _game);
         return dists.TryGetValue(toSystemGuid, out var d) ? d : -1;
     }
 
@@ -443,7 +457,6 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var snapshots = Reader.CaptureAll();
-            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _window.Toggle(snapshots);
         }
         catch (System.Exception ex)
@@ -458,7 +471,6 @@ public class Plugin : BaseUnityPlugin
         try
         {
             var jobs = RefineryReader.CaptureAll();
-            Locator.BindSession(ModApi.Services.Navigation.SessionId);
             _refineryWindow.Toggle(jobs);
         }
         catch (System.Exception ex)

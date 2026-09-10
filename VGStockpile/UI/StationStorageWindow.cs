@@ -54,6 +54,9 @@ internal sealed class StationStorageWindow : MonoBehaviour
         Array.Empty<StationStorageSnapshot>();
     private IReadOnlyDictionary<string, int> _jumpDistances =
         new Dictionary<string, int>();
+    // Supplied by the plugin, which owns the captured game the counts are read from.
+    private Func<IReadOnlyDictionary<string, int>> _jumpDistanceSource =
+        () => new Dictionary<string, int>();
 
     // Color scheme matches VGHangar's filter buttons.
     private static readonly Color BtnActive   = new(0.30f, 0.40f, 0.50f, 0.85f);
@@ -76,7 +79,8 @@ internal sealed class StationStorageWindow : MonoBehaviour
         Action<string>? onLocateByGuid = null,
         Func<string, string>? stationDisplayNameByGuid = null,
         Func<bool>? initialShowEmptyRefineries = null,
-        Action<bool>? onShowEmptyRefineriesChanged = null)
+        Action<bool>? onShowEmptyRefineriesChanged = null,
+        Func<IReadOnlyDictionary<string, int>>? jumpDistanceSource = null)
     {
         var go = new GameObject(
             "VGStockpile.Window",
@@ -91,6 +95,7 @@ internal sealed class StationStorageWindow : MonoBehaviour
         w._initialActive      = initialActive;
         w._onActiveChanged    = onActiveChanged;
         w._onLabelClick       = onLabelClick;
+        if (jumpDistanceSource != null) w._jumpDistanceSource = jumpDistanceSource;
         w._transfersEnabled        = transfersEnabled;
         w._transferCfg             = transferCfg;
         w._getStationContext       = getStationContext;
@@ -111,7 +116,7 @@ internal sealed class StationStorageWindow : MonoBehaviour
     public void Show(IReadOnlyList<StationStorageSnapshot> snapshots)
     {
         _currentSnapshots = snapshots;
-        _jumpDistances    = JumpDistances.ComputeFromCurrent();
+        _jumpDistances    = _jumpDistanceSource();
         gameObject.SetActive(true);
         Render();
     }
@@ -133,7 +138,7 @@ internal sealed class StationStorageWindow : MonoBehaviour
     {
         if (!gameObject.activeSelf) return;
         _currentSnapshots = snapshots;
-        _jumpDistances    = JumpDistances.ComputeFromCurrent();
+        _jumpDistances    = _jumpDistanceSource();
 
         var h = _scroll != null ? _scroll.horizontalNormalizedPosition : 0f;
         var v = _scroll != null ? _scroll.verticalNormalizedPosition   : 1f;
