@@ -16,7 +16,7 @@ public sealed class NavigationDistancesTests
         public JumpCountResult GetJumpCount(string from, string to) => throw new NotSupportedException();
         public NavigationStationsResult GetStations(bool visitedOnly = true) => throw new NotSupportedException();
         public NavigationStatus FocusPoi(string id) => throw new NotSupportedException();
-        public NavigationStatus FocusWorldSite(WorldSiteReference reference) => throw new NotSupportedException();
+        public NavigationStatus FocusCombatSite(CombatSiteReference reference) => throw new NotSupportedException();
     }
 
     /// <summary>An ended game must not answer for a replacement; it reports no distances at all.</summary>

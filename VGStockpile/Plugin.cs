@@ -77,7 +77,7 @@ public class Plugin : BaseUnityPlugin
             || !TransferLifecycle.IsCompatible(apiPlugin.Metadata.Version, api))
         {
             enabled = false;
-            Log.LogError("Requires VGModAPI 0.2.x with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
+            Log.LogError("Requires VGModAPI 0.2.8 or newer with lifecycle/save capabilities; Stockpile disabled without touching sidecars.");
             return;
         }
         try
