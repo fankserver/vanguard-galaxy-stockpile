@@ -9,8 +9,6 @@ namespace VGStockpile.Config;
 internal sealed class StockpileConfig
 {
     public ConfigEntry<string> ActiveCategories    { get; }
-    public ConfigEntry<float>  IconRightPadding    { get; }
-    public ConfigEntry<float>  IconTopPadding      { get; }
     public ConfigEntry<bool>   CloseWindowOnLocate { get; }
     public ConfigEntry<bool>   ShowEmptyRefineries { get; }
 
@@ -52,10 +50,6 @@ internal sealed class StockpileConfig
             "Toggling a filter button updates this. Valid values: " +
             "Ore, RefinedCanister, RefinedGoods, Crystal, TradeGoods, Salvage, Other. " +
             "(Legacy 'Refined' is auto-migrated to RefinedCanister + RefinedGoods.)");
-        IconRightPadding = cfg.Bind("UI", "IconRightPadding", 128f,
-            "Pixels of padding from the right edge of the screen for the HUD icon.");
-        IconTopPadding = cfg.Bind("UI", "IconTopPadding", 12f,
-            "Pixels of padding from the top edge of the screen for the HUD icon.");
         CloseWindowOnLocate = cfg.Bind("UI", "CloseWindowOnLocate", true,
             "When clicking a station label, close the stockpile window after focusing the map.");
         ShowEmptyRefineries = cfg.Bind("UI", "ShowEmptyRefineries", false,

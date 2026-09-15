@@ -163,7 +163,6 @@ public sealed class CoordinatedTransfersTests
         internal Handle Handle = new();
         public event Action<LifecycleEvent>? Changed;
         public SessionSnapshot? CurrentSession { get; private set; }
-        public bool IsDispatchingCallbacks => false;
         public IServiceStatus SessionTracking { get; } = new TestServiceStatus();
         public IServiceStatus SaveOutcomes { get; } = new TestServiceStatus();
         public ServiceAvailability Availability => ServiceAvailability.Available;

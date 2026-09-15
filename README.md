@@ -10,14 +10,14 @@ A BepInEx 5 plugin that adds a HUD button (top-right) which opens a single windo
 - **Vanilla "Sort by Type" column order.** Columns cluster the same way the cargo inventory's *Sort by Type* button orders items — `(itemCategory, gameplayType, name)`, lifted verbatim from the game's `Inventory.SortByCategory`.
 - **Category filters.** Six toggle buttons in the header — Ores, Refined Canisters, Refined Products, Crystals, Trade Goods, Salvage. Click to hide / show. State persists across sessions.
 - **Vanilla item tooltips on hover.** Header icons and quantity cells use `ItemTooltipSource`, the same tooltip component vanilla inventory slots use.
-- **Click a station label to "Locate"** — opens the galaxy map and focuses the station, mirroring the mission UI's Locate button (calls `SidePanel.OpenMapAndFocusPoi`).
+- **Click a station label to "Locate"** — opens the galaxy map and focuses the station, mirroring the mission UI's Locate button, through the Mod API navigation service.
 - **Live read on open.** Reopening the overview refreshes station data.
 - **Optional transfers.** Pending jobs persist alongside successful vanilla saves; transfer operations do not independently write ahead of the saved inventory/credits.
 
 ## Install
 
 1. Install BepInEx 5.x in your Vanguard Galaxy folder.
-2. Install [VGModAPI 0.2.2 or newer](https://github.com/fankserver/vanguard-galaxy-api). Keep one canonical API copy; do not duplicate its Abstractions DLL in consumer folders.
+2. Install [VGModAPI 0.2.8 or newer](https://github.com/fankserver/vanguard-galaxy-api). Keep one canonical API copy; do not duplicate its Abstractions or Unity bridge DLLs in consumer folders.
 3. Drop the `VGStockpile/` folder from the release zip into `BepInEx/plugins/`, including Newtonsoft.Json, `vgstockpile.vgmod.json` and notices.
 4. Launch the game. Missing/unsupported API or unavailable lifecycle/save capabilities disable Stockpile before sidecar operations.
 
@@ -28,7 +28,6 @@ A BepInEx 5 plugin that adds a HUD button (top-right) which opens a single windo
 | Key | Default | Purpose |
 |---|---|---|
 | `UI.ActiveCategories` | `RefinedCanister,RefinedGoods,Crystal,TradeGoods,Salvage,Other` | Comma-separated list of visible categories. Toggling a filter button updates this. |
-| `UI.IconRightPadding` / `UI.IconTopPadding` | `128` / `12` | HUD icon position from the top-right corner. |
 | `UI.CloseWindowOnLocate` | `true` | Auto-close the window when a station label is clicked. |
 | `Transfers.Enabled` | `false` | Enable inventory/credit-changing transfers. |
 
@@ -55,12 +54,18 @@ make deploy     # copies into <GAME_DIR>/BepInEx/plugins/VGStockpile/
 Three internal areas:
 
 - **`Data/`** — pure read side. `StationStorageReader` walks the galaxy POIs, reads each `SpaceStation.materialStorage`, returns immutable `StationStorageSnapshot` records. `MaterialCatalog` resolves `InventoryItemType` references and classifies materials into the `MaterialCategory` enum.
-- **`UI/`** — UGUI rendering. `StorageGridBuilder` (pure, unit-tested) computes columns + sorted rows. `StationStorageWindow` and `StationStorageIcon` are the Unity-touching layer.
-- **`Locate/`** — `IStationLocator` + production `StationLocator` that invokes vanilla's `SidePanel.OpenMapAndFocusPoi` coroutine via reflection (publicized stub vs runtime privacy).
+- **`UI/`** — UGUI rendering. `StorageGridBuilder` (pure, unit-tested) computes columns + sorted rows. `StationStorageWindow` and `RefineryJobsWindow` are the Unity-touching layer; their launchers are shared HUD registrations, not owned icons.
+- **`Locate/`** — `IStationLocator` + production `StationLocator`, which focuses a station through the navigation of the captured game it is bound to. An ended game refuses rather than focusing a replacement game's map.
 
 ## Transfer lifecycle boundaries
 
-Queue restoration waits for PlayerReady; mutations/ticks wait for the matching GameplayInitialized session and run outside API callback delivery or in-flight saves. Session replacement clears pending memory without returning old-world inventory into a new world. HUD attachment still uses SidePanel.Start—not a global readiness guess.
+Queue restoration waits for PlayerReady; mutations/ticks wait for the matching GameplayInitialized session and outside in-flight saves. Session replacement clears pending memory without returning old-world inventory into a new world. Callback-delivery timing is not re-derived here: the API does not deliver a reaction at a moment where acting would be unsafe.
+
+## UI attachment
+
+Both launchers are shared HUD registrations placed in the top-right corner with the API's semantic Storage and Refinery visuals, so their slots are coordinated with every other mod instead of using fixed offsets. The registrations live for the plugin's lifetime and simply show nothing while no window can be presented. The former `UI.IconRightPadding` and `UI.IconTopPadding` keys are gone, along with this mod's own icon sprite lookup and retry timers.
+
+Windows attach when `ModApi.Services.GameplayUi` reports a host, and live under one API-owned container obtained from the Unity bridge. Stockpile subscribes before reading `Current`, so a host that already exists is not missed, and rebuilds its content when a host is revoked and replaced. There is no Harmony patch, polling or readiness guess; if no host is reported, Stockpile has no UI rather than attaching to something unverified. Because the API's host requires a tracked session in addition to native UI initialization, UI attachment now depends on lifecycle session tracking being available. The transfer dialog is created on demand from the retained container, so opening it does not need a separate readiness signal.
 
 SaveStarted captures the queue without changing vanilla data; only its matching SaveSucceeded writes that snapshot to the reported destination. It is after vanilla's caller snapshot construction, not a pre-serialization hook. Failed/skipped saves leave sidecars unchanged. Sidecar write failures pause mutations (jobs stay visible) until a later successful save retries persistence. Corrupt, unreadable or newer-version sidecars disable restoration for that attempt and are never intentionally overwritten. Empty queues do not create new sidecars. There is no cross-file transaction or rollback guarantee. Unsaved transfer progress is lost with unsaved vanilla changes.
 
